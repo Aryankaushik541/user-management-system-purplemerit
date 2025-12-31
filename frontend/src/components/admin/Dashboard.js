@@ -1,102 +1,97 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { userAPI } from '../../services/api';
 import Toast from '../common/Toast';
 import Modal from '../common/Modal';
+import './dashboard.css';
 
 const Dashboard = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
-  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0 });
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({ role: '', status: '' });
-  const [confirmModal, setConfirmModal] = useState({ isOpen: false, action: null, userId: null, userName: '' });
+  const [pagination, setPagination] = useState({ page: 1, pages: 1 });
+
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    action: null,
+    userId: null,
+    userName: '',
+  });
 
   useEffect(() => {
     fetchUsers();
   }, [pagination.page, filters]);
 
   const fetchUsers = async () => {
-    setLoading(true);
     try {
-      const params = {
+      setLoading(true);
+      const res = await userAPI.getAllUsers({
         page: pagination.page,
-        limit: pagination.limit,
         search,
-        ...filters
-      };
-      const response = await userAPI.getAllUsers(params);
-      setUsers(response.data.users);
-      setPagination(prev => ({ ...prev, ...response.data.pagination }));
-    } catch (error) {
-      setToast({ message: 'Failed to fetch users', type: 'error' });
+        ...filters,
+      });
+      setUsers(res.data.users);
+      setPagination(res.data.pagination);
+    } catch {
+      setToast({ message: 'Failed to load users', type: 'error' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setPagination(prev => ({ ...prev, page: 1 }));
-    fetchUsers();
-  };
-
-  const handleAction = async (action, userId, userName) => {
-    setConfirmModal({ isOpen: true, action, userId, userName });
-  };
-
-  const confirmAction = async () => {
-    const { action, userId } = confirmModal;
+  const handleConfirm = async () => {
     try {
-      if (action === 'activate') {
-        await userAPI.activateUser(userId);
-        setToast({ message: 'User activated successfully', type: 'success' });
-      } else if (action === 'deactivate') {
-        await userAPI.deactivateUser(userId);
-        setToast({ message: 'User deactivated successfully', type: 'success' });
-      } else if (action === 'delete') {
-        await userAPI.deleteUser(userId);
-        setToast({ message: 'User deleted successfully', type: 'success' });
-      }
+      if (confirmModal.action === 'activate')
+        await userAPI.activateUser(confirmModal.userId);
+      if (confirmModal.action === 'deactivate')
+        await userAPI.deactivateUser(confirmModal.userId);
+
+      setToast({ message: 'Action successful', type: 'success' });
       fetchUsers();
-    } catch (error) {
-      setToast({ message: error.response?.data?.message || 'Action failed', type: 'error' });
+    } catch {
+      setToast({ message: 'Action failed', type: 'error' });
     }
-    setConfirmModal({ isOpen: false, action: null, userId: null, userName: '' });
+    setConfirmModal({ isOpen: false });
   };
 
   return (
-    <div>
+    <div className="dashboard-wrapper">
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
       <div className="dashboard-header">
         <h1 className="dashboard-title">User Management</h1>
+        <p className="dashboard-subtitle">
+          Control users, roles & access in real time
+        </p>
       </div>
 
-      <div className="card">
+      <div className="glass-card">
         <div className="dashboard-actions">
-          <form onSubmit={handleSearch} className="search-box">
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search by name or email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </form>
+          <input
+            className="search-input"
+            placeholder="Search name or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+
           <div className="filters">
             <select
               className="filter-select"
-              value={filters.role}
-              onChange={(e) => setFilters({ ...filters, role: e.target.value })}
+              onChange={(e) =>
+                setFilters({ ...filters, role: e.target.value })
+              }
             >
               <option value="">All Roles</option>
               <option value="user">User</option>
               <option value="admin">Admin</option>
             </select>
+
             <select
               className="filter-select"
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              onChange={(e) =>
+                setFilters({ ...filters, status: e.target.value })
+              }
             >
               <option value="">All Status</option>
               <option value="active">Active</option>
@@ -106,81 +101,82 @@ const Dashboard = () => {
         </div>
 
         {loading ? (
-          <div className="spinner"></div>
+          <div className="loader">Loading users…</div>
         ) : users.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">👥</div>
-            <h3 className="empty-state-title">No users found</h3>
-            <p className="empty-state-text">Try adjusting your search or filters</p>
-          </div>
+          <div className="empty-state">No users found</div>
         ) : (
           <>
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Last Login</th>
-                    <th>Actions</th>
+            <table className="user-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u._id}>
+                    <td>{u.fullName}</td>
+                    <td>{u.email}</td>
+                    <td>
+                      <span className="badge badge-role">{u.role}</span>
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${
+                          u.status === 'active'
+                            ? 'badge-active'
+                            : 'badge-inactive'
+                        }`}
+                      >
+                        {u.status}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className={`action-btn ${
+                          u.status === 'active' ? 'danger' : 'success'
+                        }`}
+                        onClick={() =>
+                          setConfirmModal({
+                            isOpen: true,
+                            action:
+                              u.status === 'active'
+                                ? 'deactivate'
+                                : 'activate',
+                            userId: u._id,
+                            userName: u.fullName,
+                          })
+                        }
+                      >
+                        {u.status === 'active' ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user._id}>
-                      <td>{user.fullName}</td>
-                      <td>{user.email}</td>
-                      <td>
-                        <span className={`badge badge-${user.role === 'admin' ? 'primary' : 'secondary'}`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge badge-${user.status === 'active' ? 'success' : 'danger'}`}>
-                          {user.status}
-                        </span>
-                      </td>
-                      <td>{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          {user.status === 'active' ? (
-                            <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleAction('deactivate', user._id, user.fullName)}
-                            >
-                              Deactivate
-                            </button>
-                          ) : (
-                            <button
-                              className="btn btn-success btn-sm"
-                              onClick={() => handleAction('activate', user._id, user.fullName)}
-                            >
-                              Activate
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
 
             <div className="pagination">
               <button
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                 disabled={pagination.page === 1}
+                onClick={() =>
+                  setPagination((p) => ({ ...p, page: p.page - 1 }))
+                }
               >
-                Previous
+                Prev
               </button>
               <span>
                 Page {pagination.page} of {pagination.pages}
               </span>
               <button
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                 disabled={pagination.page === pagination.pages}
+                onClick={() =>
+                  setPagination((p) => ({ ...p, page: p.page + 1 }))
+                }
               >
                 Next
               </button>
@@ -189,28 +185,26 @@ const Dashboard = () => {
         )}
       </div>
 
-      {/* Confirmation Modal */}
       <Modal
         isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal({ isOpen: false, action: null, userId: null, userName: '' })}
         title="Confirm Action"
+        onClose={() => setConfirmModal({ isOpen: false })}
         footer={
           <>
             <button
-              className="btn btn-secondary"
-              onClick={() => setConfirmModal({ isOpen: false, action: null, userId: null, userName: '' })}
+              className="btn-secondary"
+              onClick={() => setConfirmModal({ isOpen: false })}
             >
               Cancel
             </button>
-            <button className="btn btn-danger" onClick={confirmAction}>
+            <button className="btn-danger" onClick={handleConfirm}>
               Confirm
             </button>
           </>
         }
       >
-        <p>
-          Are you sure you want to {confirmModal.action} user <strong>{confirmModal.userName}</strong>?
-        </p>
+        Are you sure you want to {confirmModal.action}{' '}
+        <strong>{confirmModal.userName}</strong>?
       </Modal>
     </div>
   );
