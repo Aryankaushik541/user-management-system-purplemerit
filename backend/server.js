@@ -9,15 +9,16 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
-// Middleware
+/* -------------------- Middleware -------------------- */
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true
+  credentials: true,
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging in development
+/* -------- Request Logging (Development Only) -------- */
 if (process.env.NODE_ENV === 'development') {
   app.use((req, res, next) => {
     console.log(`${req.method} ${req.path}`);
@@ -25,21 +26,21 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Routes
+/* ---------------------- Routes ---------------------- */
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 
-// Health check endpoint
+/* ------------------ Health Check -------------------- */
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     message: 'Server is running',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
   });
 });
 
-// Root endpoint
+/* -------------------- Root API ---------------------- */
 app.get('/', (req, res) => {
   res.json({
     message: 'User Management System API',
@@ -47,48 +48,53 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/api/health',
       auth: '/api/auth',
-      users: '/api/users'
-    }
+      users: '/api/users',
+    },
   });
 });
 
-// 404 handler
+/* -------------------- 404 Handler ------------------- */
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found'
+    message: 'Route not found',
   });
 });
 
-// Error handler (must be last)
+/* ------------------ Error Handler ------------------- */
 app.use(errorHandler);
 
-// Database connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/user-management';
+/* ---------------- MongoDB Connection ---------------- */
+const MONGODB_URI =
+  process.env.MONGODB_URI || 'mongodb://localhost:27017/user-management';
 
-mongoose.connect(MONGODB_URI)
+const PORT = process.env.PORT || 5000;
+
+mongoose
+  .connect(MONGODB_URI)
   .then(() => {
     console.log('✅ MongoDB connected successfully');
     console.log(`📊 Database: ${mongoose.connection.name}`);
+
+    /* -------- Start Server AFTER DB Connect -------- */
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`📡 API: http://localhost:${PORT}/api`);
+    });
   })
-  .catch(err => {
+  .catch((err) => {
     console.error('❌ MongoDB connection error:', err.message);
     process.exit(1);
   });
 
-// Graceful shutdown
+/* --------------- Graceful Shutdown ------------------ */
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, closing server...');
-  mongoose.connection.close();
-  process.exit(0);
-});
-
-const PORT = process.env.PORT || 5000;
-
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📡 API: http://localhost:${PORT}/api`);
+  console.log('SIGTERM received, closing MongoDB connection...');
+  mongoose.connection.close(false, () => {
+    console.log('MongoDB disconnected');
+    process.exit(0);
+  });
 });
 
 module.exports = app;
